@@ -294,6 +294,7 @@ async function init() {
       skew = t.serverTime - Date.now();                        // اصلاح ساعت اشتباه گوشی
       const now = Date.now() + skew;
       K = a.filter(x => x[6] < now).map(toCandle);
+      if (a.length) $('price').textContent = fmt(a[a.length - 1][4]);
       setState('متصل — لحظه‌ای', true);
       evaluate();
     }
@@ -317,7 +318,7 @@ function connectWS() {
   const gen = ++wsGen;
   if (ws) { ws.onclose = null; ws.onmessage = null; try { ws.close(); } catch (e) {} }
   try { ws = new WebSocket('wss://fstream.binance.com/ws/btcusdt@kline_' + curTF); } catch (e) { setTimeout(connectWS, 3000); return; }
-  ws.onopen = () => { lastMsg = Date.now(); };
+  ws.onopen = () => { lastMsg = Date.now(); log('وب‌سوکت وصل شد', 'ok'); };
   ws.onmessage = e => {
     lastMsg = Date.now();
     const m = JSON.parse(e.data); if (!m.k) return;
@@ -325,12 +326,18 @@ function connectWS() {
     $('price').textContent = fmt(m.k.c);
     if (m.k.x && m.k.i === curTF) onClosed(m.k);
   };
-  ws.onclose = () => { if (gen === wsGen) setTimeout(connectWS, 1500); };
+  ws.onclose = () => { if (gen === wsGen) { log('وب‌سوکت قطع شد، اتصال دوباره…', 'bad'); setTimeout(connectWS, 1500); } };
 }
 // موبایل اغلب وب‌سوکت را بی‌صدا قطع می‌کند؛ اگر ۱۵ ثانیه چیزی نیامد دوباره وصل می‌شویم
 setInterval(() => { if (document.visibilityState === 'visible' && Date.now() - lastMsg > 15000) connectWS(); }, 5000);
 // شبکهٔ اطمینان: همگام‌سازی کامل با REST
 setInterval(() => { if (document.visibilityState === 'visible') init(); }, 20000);
+
+// اگر وب‌سوکت قیمت نداد (فیلتر/قطعی)، قیمت از REST گرفته می‌شود
+setInterval(async () => {
+  if (document.visibilityState !== 'visible' || Date.now() - lastMsg < 8000) return;
+  try { const r = await bf('/fapi/v1/ticker/price?symbol=BTCUSDT'); $('price').textContent = fmt(r.price); } catch (e) {}
+}, 3000);
 
 init(); connectWS();
 
